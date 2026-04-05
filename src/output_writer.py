@@ -23,7 +23,7 @@ def _timestamp() -> str:
 
 # ── Public dispatcher ─────────────────────────────────────────────────────────
 
-def write_output(header1: str, header2: str, body: str, fmt: str) -> str:
+def write_output(header1: str, header2: str, body: str, fmt: str, header3: str = "") -> str:
     """
     Write the digest to a file and return the output path.
 
@@ -32,6 +32,7 @@ def write_output(header1: str, header2: str, body: str, fmt: str) -> str:
         header2: Style descriptor, e.g. "Style: Modern".
         body:    Digest body text.
         fmt:     One of 'txt', 'pdf', 'docx', 'rtf', 'html'.
+        header3: Optional source URL appended at the bottom of the digest.
 
     Returns:
         Absolute file path string.
@@ -46,19 +47,21 @@ def write_output(header1: str, header2: str, body: str, fmt: str) -> str:
     if fmt not in writers:
         raise ValueError(f"Unsupported format: {fmt}")
 
-    return writers[fmt](header1, header2, body)
+    return writers[fmt](header1, header2, body, header3)
 
 
 # ── Format writers ────────────────────────────────────────────────────────────
 
-def write_txt(header1: str, header2: str, body: str) -> str:
+def write_txt(header1: str, header2: str, body: str, header3: str = "") -> str:
     path = OUTPUT_DIR / f"digest_{_timestamp()}.txt"
     content = f"{header1}\n{header2}\n\n{body}"
+    if header3:
+        content += f"\n\n{header3}"
     path.write_text(content, encoding="utf-8")
     return str(path)
 
 
-def write_pdf(header1: str, header2: str, body: str) -> str:
+def write_pdf(header1: str, header2: str, body: str, header3: str = "") -> str:
     try:
         from fpdf import FPDF
     except ImportError:
@@ -110,12 +113,18 @@ def write_pdf(header1: str, header2: str, body: str) -> str:
     pdf.set_font("Helvetica", size=11)
     pdf.multi_cell(usable_w, 7, _to_latin1(body))
 
+    # Source URL footer
+    if header3:
+        pdf.ln(6)
+        pdf.set_font("Helvetica", "I", 9)
+        pdf.multi_cell(usable_w, 6, _to_latin1(header3))
+
     path = OUTPUT_DIR / f"digest_{_timestamp()}.pdf"
     pdf.output(str(path))
     return str(path)
 
 
-def write_docx(header1: str, header2: str, body: str) -> str:
+def write_docx(header1: str, header2: str, body: str, header3: str = "") -> str:
     try:
         from docx import Document
         from docx.shared import Pt
@@ -140,12 +149,19 @@ def write_docx(header1: str, header2: str, body: str) -> str:
     # Body
     doc.add_paragraph(body)
 
+    # Source URL footer
+    if header3:
+        source_para = doc.add_paragraph(header3)
+        source_run = source_para.runs[0]
+        source_run.italic = True
+        source_run.font.size = Pt(9)
+
     path = OUTPUT_DIR / f"digest_{_timestamp()}.docx"
     doc.save(str(path))
     return str(path)
 
 
-def write_rtf(header1: str, header2: str, body: str) -> str:
+def write_rtf(header1: str, header2: str, body: str, header3: str = "") -> str:
     """Write a minimal but valid RTF 1.5 file."""
     def _esc(text: str) -> str:
         """Escape non-ASCII chars for RTF."""
@@ -178,7 +194,7 @@ def write_rtf(header1: str, header2: str, body: str) -> str:
     return str(path)
 
 
-def write_html(header1: str, header2: str, body: str) -> str:
+def write_html(header1: str, header2: str, body: str, header3: str = "") -> str:
     # Convert newlines to <br> for HTML
     html_body = body.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     html_body = html_body.replace("\n", "<br>\n")
@@ -196,12 +212,15 @@ def write_html(header1: str, header2: str, body: str) -> str:
     .style-tag {{ font-style: italic; color: #666; margin-bottom: 24px;
                   font-size: 0.95rem; }}
     p    {{ text-indent: 1.5em; }}
+    .source-url {{ font-style: italic; color: #888; font-size: 0.85rem;
+                   text-indent: 0; margin-top: 24px; }}
   </style>
 </head>
 <body>
   <h1>{header1}</h1>
   <div class="style-tag">{header2}</div>
   <p>{html_body}</p>
+  {('<p class="source-url">' + header3 + '</p>') if header3 else ""}
 </body>
 </html>"""
 

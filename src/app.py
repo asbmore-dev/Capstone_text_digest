@@ -63,7 +63,26 @@ st.caption("Transform any text into a polished, styled summary using Groq AI.")
 with st.sidebar:
     st.header("Settings")
 
-    api_key = os.getenv("GROQ_API_KEY", "")
+    # ── API Key input ─────────────────────────────────────────────────────────
+    api_key = st.text_input(
+        "Groq API Key",
+        value=os.getenv("GROQ_API_KEY", ""),
+        type="password",
+        placeholder="gsk_…",
+        help="Enter your Groq API key. If set in your .env file it will auto-populate.",
+    )
+
+    # ── LLM model selector ────────────────────────────────────────────────────
+    GROQ_MODELS = {
+        "LLaMA 3.1 8B (fast · free)":      "llama-3.1-8b-instant",
+        "LLaMA 3.3 70B (latest · free)":   "llama-3.3-70b-versatile",
+    }
+    chosen_model_label = st.selectbox(
+        "LLM Model",
+        list(GROQ_MODELS.keys()),
+        help="Select the Groq-hosted model to use for summarization.",
+    )
+    chosen_model = GROQ_MODELS[chosen_model_label]
 
     PRESET_STYLES = ["original", "modern", "humorous", "professional", "academic", "casual"]
     style_preset = st.selectbox("Output Style (preset)", PRESET_STYLES)
@@ -103,7 +122,7 @@ with st.sidebar:
     voice_reading = st.toggle("Enable Voice Reading", value=False)
 
     st.divider()
-    st.markdown("**Model:** `llama-3.1-8b-instant` (free)")
+    st.markdown(f"**Model:** `{chosen_model}` (free)")
     st.markdown("**TTS:** Google Text-to-Speech (free)")
 
     # ── Statistics panel ──────────────────────────────────────────────────────
@@ -214,7 +233,7 @@ if run_btn:
     from groq_client import summarize
     with st.spinner(f"Generating {chosen_style} digest via Groq AI…"):
         try:
-            raw_digest = summarize(title, body, chosen_style, api_key, reduction_pct)
+            raw_digest = summarize(title, body, chosen_style, api_key, reduction_pct, chosen_model)
         except Exception as exc:
             st.error(f"Groq API error: {exc}")
             st.stop()
@@ -248,12 +267,13 @@ if run_btn:
     # ── Step 5: Build final text ──────────────────────────────────────────────
     header_line1 = title
     header_line2 = f"Style: {chosen_style.title()}"
+    header_line3 = f"Source: {url_input.strip()}" if input_mode == "Enter URL" and url_input.strip() else ""
 
     # ── Step 6: Write output file ─────────────────────────────────────────────
     from output_writer import write_output
     with st.spinner(f"Writing {output_format.upper()} file…"):
         try:
-            out_path = write_output(header_line1, header_line2, digest, output_format)
+            out_path = write_output(header_line1, header_line2, digest, output_format, header_line3)
         except Exception as exc:
             st.error(f"Could not write output file: {exc}")
             st.stop()
@@ -263,11 +283,43 @@ if run_btn:
 
     # ── Digest preview ────────────────────────────────────────────────────────
     st.subheader("Digest Preview")
+    preview_text = (
+        f"{header_line1}\n{header_line2}\n\n{digest}"
+        + (f"\n\n{header_line3}" if header_line3 else "")
+    )
     st.text_area(
         label="",
-        value=f"{header_line1}\n{header_line2}\n\n{digest}",
+        value=preview_text,
         height=300,
         disabled=True,
+    )
+
+    # Copy to clipboard button
+    st.components.v1.html(
+        f"""
+        <textarea id="digest-text" style="display:none;">{preview_text}</textarea>
+        <button onclick="
+            const text = document.getElementById(\'digest-text\').value;
+            navigator.clipboard.writeText(text).then(() => {{
+                this.innerText = \'✅ Copied!\';
+                this.style.backgroundColor = \'#28a745\';
+                setTimeout(() => {{
+                    this.innerText = \'📋 Copy Digest to Clipboard\';
+                    this.style.backgroundColor = \'#0d6efd\';
+                }}, 2000);
+            }});
+        " style="
+            width: 100%;
+            padding: 0.5rem 1rem;
+            background-color: #0d6efd;
+            color: white;
+            border: none;
+            border-radius: 0.375rem;
+            font-size: 1rem;
+            cursor: pointer;
+        ">📋 Copy Digest to Clipboard</button>
+        """,
+        height=50,
     )
 
     st.download_button(
@@ -281,7 +333,10 @@ if run_btn:
     # ── Step 7: Voice reading ─────────────────────────────────────────────────
     if voice_reading:
         from tts_engine import get_audio_bytes
-        full_text = f"{header_line1}\n{header_line2}\n\n{digest}"
+        full_text = (
+                f"{header_line1}\n{header_line2}\n\n{digest}"
+                + (f"\n\n{header_line3}" if header_line3 else "")
+            )
         with st.spinner("Generating audio…"):
             try:
                 audio_bytes = get_audio_bytes(full_text)

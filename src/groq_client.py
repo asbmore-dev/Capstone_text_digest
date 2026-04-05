@@ -3,7 +3,7 @@ groq_client.py
 Groq API wrapper for Capstone_text_digest.
 
 Public API:
-    summarize(title, body, style, api_key, reduction_pct) -> str
+    summarize(title, body, style, api_key, reduction_pct, model) -> str
 """
 
 from __future__ import annotations
@@ -75,6 +75,7 @@ def summarize(
     style: str,
     api_key: str,
     reduction_pct: int | None = None,
+    model: str = MODEL,
 ) -> str:
     """
     Send title + body to Groq and return the digest string.
@@ -85,6 +86,7 @@ def summarize(
         style:         Style preset or custom style string.
         api_key:       Groq API key.
         reduction_pct: How much to reduce the text (10–90). Default 50.
+        model:         Groq model ID to use. Defaults to MODULE-level MODEL constant.
 
     Returns:
         The digest as a plain string.
@@ -106,7 +108,7 @@ def summarize(
 
     try:
         response = client.chat.completions.create(
-            model=MODEL,
+            model=model,
             max_tokens=MAX_TOKENS,
             temperature=0.7,
             messages=messages,
